@@ -1,5 +1,5 @@
 ## Interface: 30305
-## X-Sirus-Update https://github.com/ТВОЙ_ЛОГИН/TipOff/tree/master
+## X-Sirus-Update https://github.com/Shawodin/TipOff
 ## X-Sirus-Category 21
 ## Title: |cff00ff00TipOff
 ## Title-ruRU: |cff00ff00TipOff (Для чего предмет)
