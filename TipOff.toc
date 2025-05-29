@@ -1,6 +1,4 @@
 ## Interface: 30305
-## X-Sirus-Update https://github.com/Shawodin/TipOff
-## X-Sirus-Category 21
 ## Title: |cff00ff00TipOff
 ## Title-ruRU: |cff00ff00TipOff (Для чего предмет)
 ## Notes: Adds information into tooltip about an item's uses. Also supports auto-selling gray items and auto-repair (with guild/own funds check) at merchants.
@@ -8,8 +6,8 @@
 ## Author: JuraGood(Dalthror)
 ## Version: 0.2
 ## SavedVariables: TipOffDB
-
-# Этот файл был переименован и обновлён для аддона TipOff
+## X-Sirus-Update: https://github.com/Shawodin/TipOff
+## X-Sirus-Category: 21
 
 # Загрузка библиотек напрямую
 Libs\LibStub\LibStub.lua
