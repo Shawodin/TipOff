@@ -6,7 +6,7 @@
 ## Author: JuraGood(Dalthror)
 ## Version: 0.2
 ## SavedVariables: TipOffDB
-## X-Sirus-Update: https://github.com/Shawodin/TipOff
+## X-Sirus-Update: https://github.com/Shawodin/TipOff/tree/main
 ## X-Sirus-Category: 21
 
 # Загрузка библиотек напрямую
