@@ -4,7 +4,7 @@
 ## Notes: Adds information into tooltip about an item's uses. Also supports auto-selling gray items and auto-repair (with guild/own funds check) at merchants.
 ## Notes-ruRU: Добавляет в подсказку информацию о том, для чего используется предмет. Поддерживает автопродажу серого хлама и авторемонт экипировки (с учётом проверки средств в гильдии и у игрока) у торговцев.
 ## Author: JuraGood(Dalthror)
-## Version: 0.3
+## Version: 0.4
 ## SavedVariables: TipOffDB
 ## X-Sirus-Update: https://github.com/Shawodin/TipOff/tree/main
 ## X-Sirus-Category: 21

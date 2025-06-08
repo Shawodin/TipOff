@@ -7,7 +7,26 @@
 ]]
 
 local AddonName = ...;
-local L = LibStub("AceLocale-3.0"):GetLocale("TipOff");
+-- В начале main.lua
+_MissingLocaleKeys = _MissingLocaleKeys or {}
+
+-- Загружаем накопленные ключи из SavedVariables (если есть)
+if type(TipOffDB_MissingLocaleKeys) == "table" then
+    for _, k in ipairs(TipOffDB_MissingLocaleKeys) do
+        _MissingLocaleKeys[k] = true
+    end
+end
+
+-- Безопасная локализация: L["..."] всегда возвращает строку
+local rawL = LibStub("AceLocale-3.0"):GetLocale("TipOff")
+local L = setmetatable({}, {
+    __index = function(t, k)
+        if not rawL[k] then
+            _MissingLocaleKeys[k] = true
+        end
+        return rawL[k] or tostring(k)
+    end
+})
 
 -- Создаём основной объект аддона TipOff
 TipOff = LibStub("AceAddon-3.0"):NewAddon(AddonName, "AceHook-3.0", "AceConsole-3.0");
@@ -43,23 +62,6 @@ function TipOff:OnInitialize()
     
     TipOff.recipeIconMap = nil -- Инициализируем карту иконок рецептов
     self:RegisterChatCommand("tipoff", "ChatCommandHandler")
-
-    -- Динамическое обновление ItemRefTooltip по Shift
-    local lastItemRefLink = nil
-
-    hooksecurefunc(ItemRefTooltip, "SetHyperlink", function(self, link)
-        lastItemRefLink = link
-    end)
-
-    local shiftFrame = CreateFrame("Frame")
-    shiftFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
-    shiftFrame:SetScript("OnEvent", function(self, event, key, state)
-        if key == "LSHIFT" or key == "RSHIFT" then
-            if ItemRefTooltip:IsShown() and lastItemRefLink then
-                ItemRefTooltip:SetHyperlink(lastItemRefLink)
-            end
-        end
-    end)
 end
 
 -- Удалён обработчик ChatCommandHandler и все связанные с ним сообщения
@@ -138,12 +140,7 @@ end
 local function SafeL(key)
     local val = L[key]
     if not val then
-        if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-            -- DEFAULT_CHAT_FRAME:AddMessage("[TipOff] Нет перевода для: " .. tostring(key), 1, 0, 0)
-        else
-            -- print("[TipOff] Нет перевода для: " .. tostring(key))
-        end
-        return key
+        return tostring(key)
     end
     return val
 end
@@ -164,16 +161,15 @@ end
 function TipOff:SetItemTooltip(tooltip, ...)
     local _, itemLink = tooltip:GetItem();
     if (not itemLink) then return end;
-    
     local itemId = tonumber(string.match(itemLink, "item:(%d+)") ) or 0;
     if (itemId == 0) then return end;
-    
+
     -- Добавляем надпись для серых предметов (качество 0)
     local itemName, _, itemRarity = GetItemInfo(itemLink)
     if itemRarity == 0 then
         tooltip:AddLine("|cff228B22Хлам – можно продать!|r")
     end
-    
+
     if (not TipOff_LoadedDB) then 
         return 
     end;
@@ -191,15 +187,11 @@ function TipOff:SetItemTooltip(tooltip, ...)
     if IsShiftKeyDown() or forceShowFull then
         local itemsAdded = 0;
         local questsAdded = 0;
-        
         local itemData = TipOff_LoadedDB[itemId];
-        
         if not itemData then 
             return 
         end;
-
         local displayItemName = SafeL(itemData.name or "")
-
         local isFirstAddonBlockBeingRendered = true
 
         -- СЕКЦИЯ 1: ИНФОРМАЦИЯ О ТОМ, КАК СОЗДАЁТСЯ ПРЕДМЕТ
@@ -212,11 +204,9 @@ function TipOff:SetItemTooltip(tooltip, ...)
                 end
             end
             table.sort(sortedProfessions, function(a,b) return a.name < b.name end)
-
             for _, profEntry in ipairs(sortedProfessions) do
                 local profName = profEntry.name -- This is the English name from DB, e.g., "Alchemy", "First Aid"
                 local recipes = profEntry.data
-
                 if profName ~= "None" then
                     if (not TipOff.db.profile.filterProfs or PlayerHasProfession(profName)) then -- PlayerHasProfession needs to handle this
                         if not sectionHeaderPrinted then
@@ -227,30 +217,23 @@ function TipOff:SetItemTooltip(tooltip, ...)
                         local profIcon = GetIcon(ItemDB.Icons and ItemDB.Icons["Professions"] and ItemDB.Icons["Professions"][profName] or "")
                         local localizedProfName = L["PROF_" .. string.upper(profName:gsub("%s+", ""))] or profName
                         tooltip:AddLine(profIcon .. " " .. localizedProfName, 0.31, 0.52, 0.83)
-                        
                         local sortedRecipes = {}
                         for _, recipe in ipairs(recipes) do table.insert(sortedRecipes, recipe) end
                         table.sort(sortedRecipes, function(a,b) return (a.level or 0) < (b.level or 0) end)
-
                         for _, recipe in ipairs(sortedRecipes) do
                             if recipe.name and recipe.level and recipe.level > 0 then
                                 local displayRecipeName = SafeL(recipe.name)
                                 local coloredDisplayRecipeName = "|cffffffff" .. displayRecipeName .. "|r" -- Окрашиваем в белый
-                                
                                 local iconKey = recipe.name 
                                 local iconFilename = ""
-                                
                                 if TipOff.recipeIconMap and TipOff.recipeIconMap[iconKey] then
                                     iconFilename = TipOff.recipeIconMap[iconKey]
                                 end
-                                
                                 local iconString = ""
                                 if iconFilename ~= "" then
                                     iconString = GetIcon(iconFilename) 
                                 end
-                                
                                 local recipeText = string.format("[%s]%s[%s]", recipe.level, iconString, coloredDisplayRecipeName)
-                                
                                 tooltip:AddLine(recipeText)
                                 itemsAdded = itemsAdded + 1;
                             end
@@ -259,7 +242,6 @@ function TipOff:SetItemTooltip(tooltip, ...)
                 end
             end
         end
-        
         -- СЕКЦИЯ 2: ИНФОРМАЦИЯ О ТОМ, ГДЕ ИСПОЛЬЗУЕТСЯ ПРЕДМЕТ
         if itemData.used_in and next(itemData.used_in) then
             local sectionHeaderPrinted = false
@@ -270,11 +252,9 @@ function TipOff:SetItemTooltip(tooltip, ...)
                 end
             end
             table.sort(sortedProfessions, function(a,b) return a.name < b.name end)
-
             for _, profEntry in ipairs(sortedProfessions) do
                 local profName = profEntry.name -- This is the English name from DB
                 local recipes = profEntry.data
-
                 if profName ~= "None" then
                     if (not TipOff.db.profile.filterProfs or PlayerHasProfession(profName)) then -- PlayerHasProfession needs to handle this
                         if not sectionHeaderPrinted then
@@ -287,30 +267,23 @@ function TipOff:SetItemTooltip(tooltip, ...)
                         local profIcon = GetIcon(ItemDB.Icons and ItemDB.Icons["Professions"] and ItemDB.Icons["Professions"][profName] or "")
                         local localizedProfName = L["PROF_" .. string.upper(profName:gsub("%s+", ""))] or profName
                         tooltip:AddLine(profIcon .. " " .. localizedProfName, 0.31, 0.52, 0.83)
-                        
                         local sortedRecipes = {}
                         for _, recipe in ipairs(recipes) do table.insert(sortedRecipes, recipe) end
                         table.sort(sortedRecipes, function(a,b) return (a.level or 0) < (b.level or 0) end)
-
                         for _, recipe in ipairs(sortedRecipes) do
                             if recipe.name and recipe.level and recipe.level > 0 then 
                                 local displayRecipeName = SafeL(recipe.name)
                                 local coloredDisplayRecipeName = "|cffffffff" .. displayRecipeName .. "|r" -- Окрашиваем в белый
-
                                 local iconKey = recipe.name 
                                 local iconFilename = ""
-
                                 if TipOff.recipeIconMap and TipOff.recipeIconMap[iconKey] then
                                     iconFilename = TipOff.recipeIconMap[iconKey]
                                 end
-
                                 local iconString = ""
                                 if iconFilename ~= "" then
                                     iconString = GetIcon(iconFilename) 
                                 end
-                                
                                 local recipeText = string.format("[%s]%s[%s]", recipe.level, iconString, coloredDisplayRecipeName)
-                                
                                 tooltip:AddLine(recipeText)
                                 itemsAdded = itemsAdded + 1;
                             end
@@ -319,16 +292,13 @@ function TipOff:SetItemTooltip(tooltip, ...)
                 end
             end
         end
-        
         -- СЕКЦИЯ 3: КВЕСТЫ, СВЯЗАННЫЕ С ПРЕДМЕТОМ
         if itemData.quests and #itemData.quests > 0 then
             local playerFaction = UnitFactionGroup("player"):lower();
             local questsToDisplayFinally = {}
-
             local potentialQuests = {}
             for _, questInfo in ipairs(itemData.quests) do
                 local canShowQuest = true;
-                -- Убрана фильтрация по фракции, теперь показываем все квесты
                 if (canShowQuest and TipOff.db.profile.filterUselessQuests and questInfo.id and ArrayContains(steamwheedleRepQuests, questInfo.id)) then
                     canShowQuest = false;
                 end
@@ -336,52 +306,43 @@ function TipOff:SetItemTooltip(tooltip, ...)
                     table.insert(potentialQuests, questInfo)
                 end
             end
-
             table.sort(potentialQuests, function(a,b) 
                 local aSortLevel = a.reqlevel or a.level or 0
                 local bSortLevel = b.reqlevel or b.level or 0
                 if aSortLevel == bSortLevel then return (a.name or "") < (b.name or "") end
                 return aSortLevel < bSortLevel 
             end)
-            
             local questCache = {};
-            local playerLevel = UnitLevel("player") -- Получаем уровень игрока
-
-            -- Функция для определения цвета квеста
+            local playerLevel = UnitLevel("player")
             local function GetQuestDifficultyColor(questLevel)
-                if not questLevel or questLevel == 0 then return "ffffffff" end -- Белый для неизвестного уровня
+                if not questLevel or questLevel == 0 then return "ffffffff" end
                 local levelDiff = questLevel - playerLevel
                 if levelDiff >= 5 then
-                    return "ffff0000" -- Красный
+                    return "ffff0000"
                 elseif levelDiff >= 3 then
-                    return "ffff8000" -- Оранжевый
+                    return "ffff8000"
                 elseif levelDiff >= -2 then
-                    return "ffffd100" -- Желтый
-                elseif questLevel > playerLevel - GetQuestGreenRange() then -- Проверяем, что квест все еще зеленый, а не серый
-                    return "ff00ff00" -- Зеленый
+                    return "ffffd100"
+                elseif questLevel > playerLevel - GetQuestGreenRange() then
+                    return "ff00ff00"
                 else
-                    return "ff808080" -- Серый
+                    return "ff808080"
                 end
             end
-
             for _, questInfo in ipairs(potentialQuests) do
                 local questTitle = SafeL(questInfo.name) or L["TOOLTIP_UNKNOWN_ITEM"];
-                
                 if not questCache[questTitle] then 
                     local displayLevel = questInfo.level;
                     local reqLevelText = "";
-                    
                     if (displayLevel == 0 or displayLevel == nil) and questInfo.reqlevel then
                         displayLevel = questInfo.reqlevel;
                     elseif questInfo.reqlevel and questInfo.reqlevel ~= displayLevel and displayLevel ~= nil then
                         reqLevelText = string.format(" (%s: %s)", L["TOOLTIP_QUEST_REQ_LVL_SHORT"], questInfo.reqlevel)
                     end
-                    
                     if displayLevel and displayLevel ~= 0 then
                         displayLevel = displayLevel or "?"
                         if displayLevel ~= "?" then
                             local color = GetQuestDifficultyColor(tonumber(displayLevel))
-                            -- Добавляем префикс фракции
                             local factionPrefix = "[N] "
                             if questInfo.side == "Alliance" then
                                 factionPrefix = "|cff3399ff[A]|r "
@@ -390,12 +351,10 @@ function TipOff:SetItemTooltip(tooltip, ...)
                             end
                             local levelAndTitlePart = string.format(L["TOOLTIP_PROFESSION_LEVEL"], displayLevel) .. " " .. questTitle
                             local questLine = factionPrefix .. "|c" .. color .. levelAndTitlePart .. "|r"
-                            
                             if IsQuestCompleted(questInfo.id) then 
                                 questLine = questLine .. " |cff00ff00[V]|r"
                             end
                             questLine = questLine .. reqLevelText
-
                             table.insert(questsToDisplayFinally, questLine);
                             questsAdded = questsAdded + 1;
                             questCache[questTitle] = true; 
@@ -403,7 +362,6 @@ function TipOff:SetItemTooltip(tooltip, ...)
                     end
                 end
             end
-
             if #questsToDisplayFinally > 0 then
                 if isFirstAddonBlockBeingRendered then 
                     isFirstAddonBlockBeingRendered = false
@@ -414,12 +372,10 @@ function TipOff:SetItemTooltip(tooltip, ...)
                 end
             end
         end
-        
         if itemsAdded == 0 and questsAdded == 0 and isFirstAddonBlockBeingRendered and itemData then
              -- tooltip:AddLine("\n") 
              -- tooltip:AddLine(L["TOOLTIP_NO_INFORMATION"])
         end
-
         if (itemsAdded > 0 or questsAdded > 0) then
             tooltip:Show();
         end
@@ -526,7 +482,23 @@ function TipOff:ChatCommandHandler(input)
         self:Print("/TipOff AutoSellOff - выключить автопродажу серого хлама")
         self:Print("/TipOff AutoRepairOn  - включить авторемонт экипировки")
         self:Print("/TipOff AutoRepairOff - выключить авторемонт экипировки")
+    elseif input == "dumpmissing" then
+        self:DumpMissingLocaleKeys()
     else
         self:Print("Используйте /TipOff help для списка команд.")
     end
+end
+
+function TipOff:DumpMissingLocaleKeys()
+    local out = {}
+    for k in pairs(_MissingLocaleKeys) do
+        table.insert(out, k)
+    end
+    table.sort(out)
+    -- Выводим в чат (по частям, если много)
+    for i, key in ipairs(out) do
+        print(string.format('L["%s"] = ""', key))
+    end
+    -- Сохраняем объединённый список в SavedVariables
+    TipOffDB_MissingLocaleKeys = out
 end
